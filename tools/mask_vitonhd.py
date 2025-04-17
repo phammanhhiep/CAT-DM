@@ -78,7 +78,7 @@ for im_name in tqdm(os.listdir(osp.join(input_path, 'image'))):
 
     # Load parsing image
     label_name = im_name.replace('.jpg', '.png')
-    im_label = Image.open(osp.join(input_path, 'image-parse-v3', label_name))
+    im_label = Image.open(osp.join(input_path, 'image-parse', label_name))
 
 
     # Generate agnostic image and save

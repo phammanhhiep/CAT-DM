@@ -27,13 +27,13 @@ class OpenImageDataset(data.Dataset):
             for line in f.readlines():
                 people, clothes, category = line.strip().split()
                 if category == "0":
-                    category = "upper_body"
+                    category = "upper"
                 elif category == "1":
-                    category = "lower_body"
+                    category = "lower"
                 elif category == "2":
                     category = "dresses"
-                people_path = os.path.join(self.dataset_dir, category, "images", people)
-                clothes_path = os.path.join(self.dataset_dir, category, "images", clothes)
+                people_path = os.path.join(self.dataset_dir, category, "image", people)
+                clothes_path = os.path.join(self.dataset_dir, category, "image", clothes)
                 self.people_list.append(people_path)
                 self.clothes_list.append(clothes_path)
 
@@ -43,12 +43,12 @@ class OpenImageDataset(data.Dataset):
 
     def __getitem__(self, index):
         people_path = self.people_list[index]
-        # /home/sd/zjh/Dataset/DressCode/upper_body/images/000000_0.jpg
+        # /home/sd/zjh/Dataset/DressCode/upper_body/image/000000_0.jpg
         clothes_path = self.clothes_list[index]
-        # /home/sd/zjh/Dataset/DressCode/upper_body/images/000000_1.jpg
-        dense_path = people_path.replace("images", "dense")[:-5] + "5_uv.npz"
+        # /home/sd/zjh/Dataset/DressCode/upper_body/image/000000_1.jpg
+        dense_path = people_path.replace("image", "dense")[:-5] + "5_uv.npz"
         # /home/sd/zjh/Dataset/DressCode/upper_body/dense/000000_5_uv.npz
-        mask_path = people_path.replace("images", "mask")[:-3] + "png"
+        mask_path = people_path.replace("image", "mask")[:-3] + "png"
         # /home/sd/Harddisk/zjh/DressCode/upper_body/mask/000000_0.png
     
         # 加载图像

@@ -228,7 +228,7 @@ def get_img_agnostic_lower_body(im, im_parse, pose_data):
 
 os.makedirs(mask_path, exist_ok=True)
 
-for im_name in tqdm(os.listdir(osp.join(input_path, 'images'))):
+for im_name in tqdm(os.listdir(osp.join(input_path, 'image'))):
     if im_name.endswith("1.jpg"):
         continue
     pose_name = im_name.replace('0.jpg', '2.json')
