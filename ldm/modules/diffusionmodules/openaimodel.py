@@ -227,7 +227,30 @@ class ResBlock(TimestepBlock):
             self._forward, (x, emb), self.parameters(), self.use_checkpoint
         )
 
+    # My Note: Original code
+    # def _forward(self, x, emb):
+    #     if self.updown:
+    #         in_rest, in_conv = self.in_layers[:-1], self.in_layers[-1]
+    #         h = in_rest(x)
+    #         h = self.h_upd(h)
+    #         x = self.x_upd(x)
+    #         h = in_conv(h)
+    #     else:
+    #         h = self.in_layers(x)
+    #         emb_out = self.emb_layers(emb).type(h.dtype)
+    #     while len(emb_out.shape) < len(h.shape):
+    #         emb_out = emb_out[..., None]
+    #     if self.use_scale_shift_norm:
+    #         out_norm, out_rest = self.out_layers[0], self.out_layers[1:]
+    #         scale, shift = th.chunk(emb_out, 2, dim=1)
+    #         h = out_norm(h) * (1 + scale) + shift
+    #         h = out_rest(h)
+    #     else:
+    #         h = h + emb_out
+    #         h = self.out_layers(h)
+    #     return self.skip_connection(x) + h
 
+    # My Note: fix to use 16-mixed precision
     def _forward(self, x, emb):
         if self.updown:
             in_rest, in_conv = self.in_layers[:-1], self.in_layers[-1]
@@ -236,8 +259,10 @@ class ResBlock(TimestepBlock):
             x = self.x_upd(x)
             h = in_conv(h)
         else:
-            h = self.in_layers(x)
-        emb_out = self.emb_layers(emb).type(h.dtype)
+            with th.cuda.amp.autocast(enabled=False):
+                h = self.in_layers(x.float())
+                emb_out_fp32 = self.emb_layers(emb.float())
+            emb_out = emb_out_fp32.to(h.dtype)
         while len(emb_out.shape) < len(h.shape):
             emb_out = emb_out[..., None]
         if self.use_scale_shift_norm:
@@ -248,7 +273,11 @@ class ResBlock(TimestepBlock):
         else:
             h = h + emb_out
             h = self.out_layers(h)
-        return self.skip_connection(x) + h
+
+        with th.cuda.amp.autocast(enabled=False):
+            skip_result_fp32 = self.skip_connection(x.float())
+        final_skip_result = skip_result_fp32.to(h.dtype)
+        return final_skip_result + h    
 
 
 class My_ResBlock(TimestepBlock):

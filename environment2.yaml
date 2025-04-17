@@ -1,0 +1,31 @@
+name: CAT-DM
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+    - numpy<2.0  
+    - torch==2.6.0
+    - torch-fidelity==0.3.0
+    - torchmetrics==1.7.1
+    - torchvision==0.21.0
+    - pytorch-lightning==2.5.1
+    - transformers==4.51.3       
+    - albumentations
+    - diffusers==0.33.1
+    - bezier
+    - opencv-python==4.11.0.86
+    - pudb
+    - invisible-watermark
+    - imageio==2.37.0
+    - imageio-ffmpeg==0.6.0
+    - omegaconf==2.3.0
+    - test-tube>=0.7.5
+    - streamlit>=0.73.1
+    - einops
+    - kornia
+    - -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
+    - -e git+https://github.com/openai/CLIP.git@main#egg=clip
+    - -e .

@@ -15,6 +15,9 @@ from pytorch_lightning import seed_everything
 from ldm.util import instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
 
+# Optimize model performance
+torch.set_float32_matmul_precision("medium")
+
 def un_norm(x):
     return (x+1.0)/2.0
 
@@ -78,7 +81,7 @@ if __name__ == "__main__":
     # 加载 model
     # =============================================================
     model = instantiate_from_config(config.model)
-    model.load_state_dict(torch.load(opt.ckpt, map_location="cpu")["state_dict"], strict=False)
+    model.load_state_dict(torch.load(opt.ckpt, map_location="cpu", weights_only=False)["state_dict"], strict=False)
     model.cuda()
     model.eval()
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -96,11 +99,11 @@ if __name__ == "__main__":
     
     unpaired_direct_dir = "{}/Unpaired_Direst".format(opt.output_dir)
     unpaired_concat_dir = "{}/Unpaired_Concatenation".format(opt.output_dir)
-    os.makedirs(unpaired_direct_dir)
-    os.makedirs(unpaired_concat_dir)
+    os.makedirs(unpaired_direct_dir, exist_ok=True)
+    os.makedirs(unpaired_concat_dir, exist_ok=True)
 
     with torch.no_grad():
-        with precision_scope("cuda"):
+        with precision_scope("cuda", dtype=torch.bfloat16):
             for i,batch in enumerate(data.dataloader):
                 # 加载数据
                 inpaint = batch["inpaint_image"].to(torch.float16).to(device)
@@ -118,7 +121,7 @@ if __name__ == "__main__":
                 shape = (model.channels, model.image_size, model.image_size)
                 # 预测结果
                 samples, _ = sampler.sample(S=opt.ddim,
-                                                 batch_size=1,
+                                                 batch_size=config.data.params.batch_size,
                                                  shape=shape,
                                                  pose=hint,
                                                  conditioning=reference,
@@ -129,7 +132,7 @@ if __name__ == "__main__":
                 x_samples = model.first_stage_model.decode(samples[:,:4,:,:])
 
                 x_samples_ddim = torch.clamp((x_samples + 1.0) / 2.0, min=0.0, max=1.0)
-                x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
+                x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).to(float).numpy()
                 x_checked_image=x_samples_ddim
                 x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)                
                 # 保存图像

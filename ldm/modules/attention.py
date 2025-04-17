@@ -176,11 +176,11 @@ class CrossAttention(nn.Module):
 
     def forward(self, x, context=None, mask=None):
         h = self.heads
-
         q = self.to_q(x)
         context = default(context, x)
-        k = self.to_k(context)
-        v = self.to_v(context)
+        q = self.to_q(q_in)
+        k = self.to_k(context_in)
+        v = self.to_v(context_in)
 
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
 
@@ -219,34 +219,106 @@ class MemoryEfficientCrossAttention(nn.Module):
         self.to_out = nn.Sequential(nn.Linear(inner_dim, query_dim), nn.Dropout(dropout))
         self.attention_op: Optional[Any] = None
 
-    def forward(self, x, context=None, mask=None):
-        q = self.to_q(x)
-        context = default(context, x)
-        k = self.to_k(context)
-        v = self.to_v(context)
+    # My Note: Original code
+    # def forward(self, x, context=None, mask=None):
+    #     q = self.to_q(x)
+    #     context = default(context, x)
 
-        b, _, _ = q.shape
+    #     k = self.to_k(context)
+    #     v = self.to_v(context)
+
+    #     b, _, _ = q.shape
+    #     q, k, v = map(
+    #         lambda t: t.unsqueeze(3)
+    #         .reshape(b, t.shape[1], self.heads, self.dim_head)
+    #         .permute(0, 2, 1, 3)
+    #         .reshape(b * self.heads, t.shape[1], self.dim_head)
+    #         .contiguous(),
+    #         (q, k, v),
+    #     )
+
+    #     # actually compute the attention, what we cannot get enough of
+    #     out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
+
+    #     if exists(mask):
+    #         raise NotImplementedError
+    #     out = (
+    #         out.unsqueeze(0)
+    #         .reshape(b, self.heads, out.shape[1], self.dim_head)
+    #         .permute(0, 2, 1, 3)
+    #         .reshape(b, out.shape[1], self.heads * self.dim_head)
+    #     )
+    #     return self.to_out(out)
+
+    # My Note: new code to allow use 16-mixed precision.
+    def forward(self, x, context=None, mask=None):
+        context = default(context, x) # Determine context early
+
+        # --- START CORRECTED CHANGE for Mixed Precision ---
+        # Cast inputs to float32 BEFORE passing to the linear layers
+        # Assumes weights of to_q, to_k, to_v are float32
+        x_float = x.float()
+        context_float = context.float()
+        # --- END CORRECTED CHANGE ---
+
+        # Use the float32 versions for the linear projections
+        q = self.to_q(x_float)
+        k = self.to_k(context_float)
+        v = self.to_v(context_float)
+
+        # Reshape q, k, v
+        b, _, _ = q.shape # Use shape from the new q
         q, k, v = map(
             lambda t: t.unsqueeze(3)
             .reshape(b, t.shape[1], self.heads, self.dim_head)
             .permute(0, 2, 1, 3)
             .reshape(b * self.heads, t.shape[1], self.dim_head)
             .contiguous(),
-            (q, k, v),
+            (q, k, v), # Use the new q, k, v
         )
 
-        # actually compute the attention, what we cannot get enough of
+        # --- Compute attention using xformers ---
+        # xformers usually prefers float16 or bfloat16 for efficiency.
+        # Since q, k, v are now float32, we might need to cast them back
+        # to the original input type (or the compute type for AMP)
+        # before passing them to xformers.
+
+        compute_dtype = x.dtype # Get the original dtype (likely float16 if precision="16-mixed")
+                                # Or could get from precision plugin if available/needed
+
+        # Cast q, k, v back to the expected compute dtype for xformers
+        q = q.to(compute_dtype)
+        k = k.to(compute_dtype)
+        v = v.to(compute_dtype)
+
         out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
+        # Output 'out' will likely be in compute_dtype (e.g., float16)
 
         if exists(mask):
-            raise NotImplementedError
+            raise NotImplementedError # Keep this as is
+
+        # Reshape output
         out = (
             out.unsqueeze(0)
             .reshape(b, self.heads, out.shape[1], self.dim_head)
             .permute(0, 2, 1, 3)
             .reshape(b, out.shape[1], self.heads * self.dim_head)
         )
-        return self.to_out(out)
+
+        # --- Final linear layer (to_out) ---
+        # The input 'out' is likely float16/bfloat16 here.
+        # self.to_out is nn.Sequential(nn.Linear(...), nn.Dropout(...))
+        # The nn.Linear inside to_out likely has float32 weights.
+        # Therefore, we need to cast the input to to_out to float32 as well.
+        out_float = out.float()
+        out = self.to_out(out_float)
+        # --- End fix for to_out ---
+
+        # The final output 'out' is now float32. If subsequent layers in
+        # BasicTransformerBlock expect float16/bfloat16 due to AMP,
+        # the AMP context outside this function should handle the casting.
+        # No need to cast back explicitly here unless proven necessary later.
+        return out        
     
 class BasicTransformerBlock(nn.Module):
     ATTENTION_MODES = {
@@ -274,9 +346,15 @@ class BasicTransformerBlock(nn.Module):
         return checkpoint(self._forward, (x, context), self.parameters(), self.checkpoint)
 
     def _forward(self, x, context=None):
-        x = self.attn1(self.norm1(x), context=context if self.disable_self_attn else None) + x
-        x = self.attn2(self.norm2(x), context=context) + x
-        x = self.ff(self.norm3(x)) + x
+        # My Note: Original code
+        # x = self.attn1(self.norm1(x), context=context if self.disable_self_attn else None) + x
+        # x = self.attn2(self.norm2(x), context=context) + x
+        # x = self.ff(self.norm3(x)) + x
+
+        # My Note: fix to use 16-mixed precision
+        x = self.attn1(self.norm1(x.float()), context=context if self.disable_self_attn else None) + x
+        x = self.attn2(self.norm2(x.float()), context=context) + x
+        x = self.ff(self.norm3(x.float())) + x
         return x
 
 
