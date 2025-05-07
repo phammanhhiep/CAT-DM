@@ -1,3 +1,9 @@
+"""
+Create a mask from an image having a model wearing her original cloth. The mask 
+paints the upper cloth item white, and paints the rest black.
+"""
+
+
 import sys
 import json
 from os import path as osp

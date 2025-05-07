@@ -48,6 +48,7 @@ class OpenImageDataset(data.Dataset):
         # 加载图像
         img = Image.open(img_path).convert("RGB").resize((512, 512))
         img = torchvision.transforms.ToTensor()(img)
+        # My note: why refernce is resize to smaller size than the rest?
         refernce = Image.open(reference_path).convert("RGB").resize((224, 224))
         refernce = torchvision.transforms.ToTensor()(refernce)
         mask = Image.open(mask_path).convert("L").resize((512, 512))

@@ -94,6 +94,17 @@ def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
 
 
 def extract_into_tensor(a, t, x_shape):
+    """
+    Select values from a 1D tensor 'a' based on indices in 't' and reshape for broadcasting to match 'x_shape'.
+    
+    Args:
+        a (TYPE): Description
+        t (TYPE): Description
+        x_shape (TYPE): Description
+    
+    Returns:
+        TYPE: Description
+    """
     b, *_ = t.shape
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))

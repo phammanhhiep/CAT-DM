@@ -103,7 +103,7 @@ if __name__ == "__main__":
                 reference = batch["ref_imgs"].to(torch.float16).to(device)
                 mask = batch["inpaint_mask"].to(torch.float16).to(device)
                 hint = batch["hint"].to(torch.float16).to(device)
-                truth = batch["GT"].to(torch.float16).to(device)
+                truth = batch["GT"].to(torch.float16).to(device) # My Note: It is not ground truth if reference image does not have same cloth as in the truth image.
                 # 数据处理
                 encoder_posterior_inpaint = model.first_stage_model.encode(inpaint)
                 z_inpaint = model.scale_factor * (encoder_posterior_inpaint.sample()).detach()
@@ -125,6 +125,8 @@ if __name__ == "__main__":
                 x_samples = model.first_stage_model.decode(samples[:,:4,:,:])
 
                 x_samples_ddim = torch.clamp((x_samples + 1.0) / 2.0, min=0.0, max=1.0)
+
+                # My Note: why turn it to numpy array and then turn back to pytorch tensor?
                 x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
                 x_checked_image=x_samples_ddim
                 x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)                
@@ -139,7 +141,9 @@ if __name__ == "__main__":
                 truth = torch.clamp((truth + 1.0) / 2.0, min=0.0, max=1.0)
                 truth = truth.cpu().permute(0, 2, 3, 1).numpy()
                 truth = torch.from_numpy(truth).permute(0, 3, 1, 2)
-                x_checked_image_torch_C = x_checked_image_torch*(1-mask) + truth.cpu()*mask
+
+                # My Note: remove all pixels except cloth section, and then add missing pixels from ground truth. The step remove generated pixels in unwanted section of the images.  
+                x_checked_image_torch_C = x_checked_image_torch*(1-mask) + truth.cpu()*mask 
                 x_checked_image_torch = torch.nn.functional.interpolate(x_checked_image_torch.float(), size=[512,384])
                 x_checked_image_torch_C = torch.nn.functional.interpolate(x_checked_image_torch_C.float(), size=[512,384])
                 

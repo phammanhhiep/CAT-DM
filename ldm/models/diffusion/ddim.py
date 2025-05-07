@@ -41,9 +41,10 @@ class DDIMSampler(object):
         self.register_buffer('sqrt_recipm1_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod.cpu() - 1)))
 
         # ddim sampling parameters
-        ddim_sigmas, ddim_alphas, ddim_alphas_prev = make_ddim_sampling_parameters(alphacums=alphas_cumprod.cpu(),
-                                                                                   ddim_timesteps=self.ddim_timesteps,
-                                                                                   eta=ddim_eta,verbose=verbose)
+        ddim_sigmas, ddim_alphas, ddim_alphas_prev = make_ddim_sampling_parameters(
+            alphacums=alphas_cumprod.cpu(),
+            ddim_timesteps=self.ddim_timesteps,
+            eta=ddim_eta,verbose=verbose)
 
         self.register_buffer('ddim_sigmas', ddim_sigmas)
         self.register_buffer('ddim_alphas', ddim_alphas)
@@ -56,29 +57,29 @@ class DDIMSampler(object):
 
     @torch.no_grad()
     def sample(self,
-               S,
-               batch_size,
-               shape,
-               pose,
-               conditioning=None,
-               callback=None,
-               normals_sequence=None,
-               img_callback=None,
-               quantize_x0=False,
-               eta=0.,
-               mask=None,
-               x0=None,
-               temperature=1.,
-               noise_dropout=0.,
-               score_corrector=None,
-               corrector_kwargs=None,
-               verbose=True,
-               x_T=None,
-               log_every_t=100,
-               unconditional_guidance_scale=1.,
-               unconditional_conditioning=None,
-               **kwargs
-               ):
+        S,
+        batch_size,
+        shape,
+        pose,
+        conditioning=None,
+        callback=None,
+        normals_sequence=None,
+        img_callback=None,
+        quantize_x0=False,
+        eta=0.,
+        mask=None,
+        x0=None,
+        temperature=1.,
+        noise_dropout=0.,
+        score_corrector=None,
+        corrector_kwargs=None,
+        verbose=True,
+        x_T=None,
+        log_every_t=100,
+        unconditional_guidance_scale=1.,
+        unconditional_conditioning=None,
+        **kwargs
+    ):
         if conditioning is not None:
             if isinstance(conditioning, dict):
                 cbs = conditioning[list(conditioning.keys())[0]].shape[0]
@@ -94,31 +95,44 @@ class DDIMSampler(object):
         size = (batch_size, C, H, W)
         print(f'Data shape for DDIM sampling is {size}, eta {eta}')
 
-        samples, intermediates = self.ddim_sampling(conditioning, size, pose,
-                                                    callback=callback,
-                                                    img_callback=img_callback,
-                                                    quantize_denoised=quantize_x0,
-                                                    mask=mask, x0=x0,
-                                                    ddim_use_original_steps=False,
-                                                    noise_dropout=noise_dropout,
-                                                    temperature=temperature,
-                                                    score_corrector=score_corrector,
-                                                    corrector_kwargs=corrector_kwargs,
-                                                    x_T=x_T,
-                                                    log_every_t=log_every_t,
-                                                    unconditional_guidance_scale=unconditional_guidance_scale,
-                                                    unconditional_conditioning=unconditional_conditioning,
-                                                    **kwargs
-                                                    )
+        samples, intermediates = self.ddim_sampling(
+            conditioning, size, pose,
+            callback=callback,
+            img_callback=img_callback,
+            quantize_denoised=quantize_x0,
+            mask=mask, x0=x0,
+            ddim_use_original_steps=False,
+            noise_dropout=noise_dropout,
+            temperature=temperature,
+            score_corrector=score_corrector,
+            corrector_kwargs=corrector_kwargs,
+            x_T=x_T,
+            log_every_t=log_every_t,
+            unconditional_guidance_scale=unconditional_guidance_scale,
+            unconditional_conditioning=unconditional_conditioning,
+            **kwargs)
         return samples, intermediates
 
     @torch.no_grad()
-    def ddim_sampling(self, cond, shape, pose,
-                      x_T=None, ddim_use_original_steps=False,
-                      callback=None, timesteps=None, quantize_denoised=False,
-                      mask=None, x0=None, img_callback=None, log_every_t=100,
-                      temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
-                      unconditional_guidance_scale=1., unconditional_conditioning=None,**kwargs):
+    def ddim_sampling(
+        self, cond, shape, pose,
+        x_T=None, 
+        ddim_use_original_steps=False,
+        callback=None, 
+        timesteps=None, 
+        quantize_denoised=False,
+        mask=None, 
+        x0=None, 
+        img_callback=None, 
+        log_every_t=100,
+        temperature=1., 
+        noise_dropout=0., 
+        score_corrector=None, 
+        corrector_kwargs=None,
+        unconditional_guidance_scale=1., 
+        unconditional_conditioning=None,
+        **kwargs
+    ):
         device = self.model.betas.device
         b = shape[0]
         if x_T is None:
@@ -160,9 +174,18 @@ class DDIMSampler(object):
         return img, intermediates
 
     @torch.no_grad()
-    def p_sample_ddim(self, x, c, t, pose, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
-                      temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
-                      unconditional_guidance_scale=1., unconditional_conditioning=None,**kwargs):
+    def p_sample_ddim(self, x, c, t, pose, index, 
+        repeat_noise=False, 
+        use_original_steps=False, 
+        quantize_denoised=False,
+        temperature=1., 
+        noise_dropout=0., 
+        score_corrector=None, 
+        corrector_kwargs=None,
+        unconditional_guidance_scale=1., 
+        unconditional_conditioning=None,
+        **kwargs
+    ):
         b, *_, device = *x.shape, x.device
 
         if 'test_model_kwargs' in kwargs:

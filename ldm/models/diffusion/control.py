@@ -324,9 +324,11 @@ class ControlLDM(DDPM):
 
         # 随机加噪
         noise = torch.randn_like(z_new[:,:4,:,:])
-        x_noisy = self.q_sample(x_start=z_new[:,:4,:,:], t=t, noise=noise)           
+        # My Note: add noise only to the first four channels in z_new is added noise. The first 4 channels likely are of z obtained in get_input.
+        x_noisy = self.q_sample(x_start=z_new[:,:4,:,:], t=t, noise=noise)
         x_noisy = torch.cat((x_noisy, z_new[:,4:,:,:]),dim=1)
         
+        #### My Note: output of the two branches if-then are the same. Likely a mistake or leftover a unused code.
         # 预测噪声
         if random.uniform(0, 1)<0.2:
             model_output = self.apply_model(x_noisy, hint, t, reference_clip, reference_dino)
