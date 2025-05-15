@@ -13,10 +13,17 @@ class OpenImageDataset(data.Dataset):
 
         if state == "train":
             self.dataset_file = os.path.join(dataset_dir, "train_pairs.txt")
-            with open(self.dataset_file, 'r') as f:
-                for line in f.readlines():
-                    person, garment = line.strip().split()
-                    self.dataset_list.append([person, person])
+            if type == "unpaired":
+                with open(self.dataset_file, 'r') as f:
+                    for line in f.readlines():
+                        person, garment = line.strip().split()
+                        self.dataset_list.append([person, garment])
+
+            if type == "paired":
+                with open(self.dataset_file, 'r') as f:
+                    for line in f.readlines():
+                        person, garment = line.strip().split()
+                        self.dataset_list.append([person, person])
 
         if state == "test":
             self.dataset_file = os.path.join(dataset_dir, "test_pairs.txt")

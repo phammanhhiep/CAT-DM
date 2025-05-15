@@ -16,6 +16,8 @@ from pytorch_lightning import seed_everything
 from ldm.util import instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
 
+from ldm.modules.diffusionmodules.util import make_ddim_timesteps
+
 # Optimize model performance
 torch.set_float32_matmul_precision("medium")
 
@@ -42,12 +44,13 @@ class DataModuleFromConfig(pytorch_lightning.LightningDataModule):
         self.use_worker_init_fn = use_worker_init_fn
         self.wrap = wrap
         self.datasets = instantiate_from_config(test)
-        self.dataloader = torch.utils.data.DataLoader(self.datasets, 
-                                                      batch_size=self.batch_size,
-                                                      num_workers=self.num_workers,
-                                                      shuffle=shuffle,
-                                                      worker_init_fn=None)
-
+        self.dataloader = torch.utils.data.DataLoader(
+            self.datasets, 
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=shuffle,
+            worker_init_fn=None
+        )
 
 
 if __name__ == "__main__":
@@ -60,6 +63,9 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--seed", type=int, default=42)
     parser.add_argument("-d", "--ddim", type=int, default=64)
     parser.add_argument("--output_dir", type=str, default="")
+    parser.add_argument("--gt", action="store_true", default=False)
+    parser.add_argument("--gt_down_sampling", action="store_true", default=False)
+    parser.add_argument("--data_state",  type=str, default="test", choices=["train", "test"])
     opt = parser.parse_args()
 
     # =============================================================
@@ -75,6 +81,10 @@ if __name__ == "__main__":
     # =============================================================
     # 加载 dataloader
     # =============================================================
+    if opt.gt or opt.data_state == "train":
+        config.data.params.test.params.type = "paired"
+    if opt.data_state:
+        config.data.params.test.params.state = opt.data_state
     data = instantiate_from_config(config.data)
     print(f"{data.__class__.__name__}, {len(data.dataloader)}")
 
@@ -98,10 +108,20 @@ if __name__ == "__main__":
     # 开始测试
     # =============================================================
     
-    output_dir = opt.output_dir
+    output_dir = os.path.join(
+        opt.output_dir, config.data.params.test.params.type
+    )
     os.makedirs(output_dir, exist_ok=True)
 
     with torch.no_grad():
+
+        ddim_timesteps = make_ddim_timesteps(
+            ddim_discr_method="uniform", 
+            num_ddim_timesteps=opt.ddim,
+            num_ddpm_timesteps=config.model.params.timesteps,
+        )
+        noise_timestep = ddim_timesteps[-1]
+
         with precision_scope("cuda", dtype=torch.bfloat16):
             for i,batch in enumerate(data.dataloader):
                 # 加载数据
@@ -111,6 +131,23 @@ if __name__ == "__main__":
                 hint = batch["hint"].to(torch.float16).to(device)
                 truth = batch["GT"].to(torch.float16).to(device)
                 # 数据处理
+
+                x_T = None
+                if opt.gt:
+                    if opt.gt_down_sampling:
+                        down_truth = torch.nn.functional.interpolate(
+                            torch.nn.functional.interpolate(
+                                truth, size=[198,198]),
+                            size=[512,512]
+                        )
+                        x_T = model.first_stage_model.encode(down_truth)
+                    else:
+                        x_T = model.first_stage_model.encode(truth)
+                    x_T = model.scale_factor * (x_T.sample()).detach()
+                    noise = torch.randn_like(x_T)
+                    ts = torch.full((len(x_T),), noise_timestep, device=x_T.device).long()
+                    x_T = model.q_sample(x_start=x_T, t=ts, noise=noise)
+
                 encoder_posterior_inpaint = model.first_stage_model.encode(inpaint)
                 z_inpaint = model.scale_factor * (encoder_posterior_inpaint.sample()).detach()
                 mask_resize = torchvision.transforms.Resize([z_inpaint.shape[-2],z_inpaint.shape[-1]])(mask)
@@ -126,6 +163,7 @@ if __name__ == "__main__":
                                                  conditioning=reference,
                                                  verbose=False,
                                                  eta=0,
+                                                 x_T=x_T,
                                                  test_model_kwargs=test_model_kwargs)
                 samples = 1. / model.scale_factor * samples
                 x_samples = model.first_stage_model.decode(samples[:,:4,:,:])
@@ -145,17 +183,27 @@ if __name__ == "__main__":
                 x_checked_image_torch = torch.nn.functional.interpolate(x_checked_image_torch.float(), size=[512,384])
                 x_checked_image_torch_C = torch.nn.functional.interpolate(x_checked_image_torch_C.float(), size=[512,384])
                 
+                all_img.append(torch.nn.functional.interpolate(
+                    truth.float(), size=[512,384])[0])
                 all_img.append(x_checked_image_torch[0])
                 all_img.append(x_checked_image_torch_C[0])
 
                 poisson_img = cv2.seamlessClone(
-                    torch.nn.functional.interpolate(
-                        truth.float(), size=[512,384]
-                    ).permute(0, 2, 3, 1)[0].numpy() * 255, 
-                    x_checked_image_torch[0] * 255, 
-                    torch.nn.functional.interpolate(
+                    cv2.cvtColor(
+                        (torch.nn.functional.interpolate(
+                            truth.float(), size=[512,384]
+                            ).permute(0, 2, 3, 1)[0].numpy() * 255
+                        ).astype(np.uint8), 
+                        cv2.COLOR_RGB2BGR
+                    ),
+                    cv2.cvtColor(
+                        (x_checked_image_torch.permute(
+                            0, 2, 3, 1)[0].numpy() * 255
+                        ).astype(np.uint8), 
+                        cv2.COLOR_RGB2BGR), 
+                    (torch.nn.functional.interpolate(
                         mask.float(), size=[512,384]
-                    )[0][0].numpy() * 255, 
+                    )[0][0].numpy() * 255).astype(np.uint8),
                     (192,256), 
                     cv2.NORMAL_CLONE
                 )
@@ -173,4 +221,4 @@ if __name__ == "__main__":
                 grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
 
                 img = Image.fromarray(grid.astype(np.uint8))
-                img.save("{}/{}.png".format(output_dir, str(i)))
+                img.save(os.path.join(output_dir, "{}.png".format(str(i))))
