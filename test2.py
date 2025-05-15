@@ -4,6 +4,7 @@ import argparse
 import torchvision
 import pytorch_lightning
 import numpy as np
+import cv2
 
 from PIL import Image
 from torch import autocast
@@ -97,10 +98,8 @@ if __name__ == "__main__":
     # 开始测试
     # =============================================================
     
-    unpaired_direct_dir = "{}/Unpaired_Direst".format(opt.output_dir)
-    unpaired_concat_dir = "{}/Unpaired_Concatenation".format(opt.output_dir)
-    os.makedirs(unpaired_direct_dir, exist_ok=True)
-    os.makedirs(unpaired_concat_dir, exist_ok=True)
+    output_dir = opt.output_dir
+    os.makedirs(output_dir, exist_ok=True)
 
     with torch.no_grad():
         with precision_scope("cuda", dtype=torch.bfloat16):
@@ -135,12 +134,8 @@ if __name__ == "__main__":
                 x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).to(float).numpy()
                 x_checked_image=x_samples_ddim
                 x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)                
-                # 保存图像
+
                 all_img=[]
-                all_img_C = []
-                # all_img.append(un_norm(truth[0]).cpu())
-                # all_img.append(un_norm(inpaint[0]).cpu())
-                # all_img.append(un_norm_clip(torchvision.transforms.Resize([512,512])(reference)[0].cpu()))
                 mask = mask.cpu().permute(0, 2, 3, 1).numpy()
                 mask = torch.from_numpy(mask).permute(0, 3, 1, 2)
                 truth = torch.clamp((truth + 1.0) / 2.0, min=0.0, max=1.0)
@@ -151,15 +146,31 @@ if __name__ == "__main__":
                 x_checked_image_torch_C = torch.nn.functional.interpolate(x_checked_image_torch_C.float(), size=[512,384])
                 
                 all_img.append(x_checked_image_torch[0])
-                all_img_C.append(x_checked_image_torch_C[0])
+                all_img.append(x_checked_image_torch_C[0])
+
+                poisson_img = cv2.seamlessClone(
+                    torch.nn.functional.interpolate(
+                        truth.float(), size=[512,384]
+                    ).permute(0, 2, 3, 1)[0].numpy() * 255, 
+                    x_checked_image_torch[0] * 255, 
+                    torch.nn.functional.interpolate(
+                        mask.float(), size=[512,384]
+                    )[0][0].numpy() * 255, 
+                    (192,256), 
+                    cv2.NORMAL_CLONE
+                )
+                poisson_img = cv2.cvtColor(poisson_img, cv2.COLOR_BGR2RGB)
+                poisson_img = torchvision.transforms.ToTensor()(poisson_img).to(truth.dtype)
+                all_img.append(poisson_img)    
+
+                all_img.append(
+                    un_norm_clip(torchvision.transforms.Resize([512,384])(
+                        reference
+                    )[0].cpu())
+                )
                 grid = torch.stack(all_img, 0)
                 grid = torchvision.utils.make_grid(grid)
                 grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
-                img = Image.fromarray(grid.astype(np.uint8))
-                img.save("{}/{}.png".format(unpaired_direct_dir, str(i)))
 
-                grid_C = torch.stack(all_img_C, 0)
-                grid_C = torchvision.utils.make_grid(grid_C)
-                grid_C = 255. * rearrange(grid_C, 'c h w -> h w c').cpu().numpy()
-                img_C = Image.fromarray(grid_C.astype(np.uint8))
-                img_C.save("{}/{}.png".format(unpaired_concat_dir, str(i)))
+                img = Image.fromarray(grid.astype(np.uint8))
+                img.save("{}/{}.png".format(output_dir, str(i)))
