@@ -38,11 +38,12 @@ class DataModuleFromConfig(pytorch_lightning.LightningDataModule):
         self.use_worker_init_fn = use_worker_init_fn
         self.wrap = wrap
         self.datasets = instantiate_from_config(test)
-        self.dataloader = torch.utils.data.DataLoader(self.datasets, 
-                                                      batch_size=self.batch_size,
-                                                      num_workers=self.num_workers,
-                                                      shuffle=shuffle,
-                                                      worker_init_fn=None)
+        self.dataloader = torch.utils.data.DataLoader(
+            self.datasets, 
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=shuffle,
+            worker_init_fn=None)
 
 
 

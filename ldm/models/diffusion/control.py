@@ -237,6 +237,7 @@ class ControlLDM(DDPM):
         self.instantiate_cond_stage(cond_stage_config)                          # self.cond_stage_model 调用 FrozenCLIPImageEmbedder
         self.proj_out=nn.Linear(1024, 768)                                      # 全连接层
         self.scale_factor = scale_factor                                        # 0.18215
+        # My Note: self.learnable_vector and self.trainable_vector are not used anywhere on the project. 
         self.learnable_vector = nn.Parameter(torch.randn((1,1,768)), requires_grad=False)
         self.trainable_vector = nn.Parameter(torch.randn((1,1,768)), requires_grad=True)
 
