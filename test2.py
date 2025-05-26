@@ -144,9 +144,9 @@ if __name__ == "__main__":
                     else:
                         x_T = model.first_stage_model.encode(truth)
                     x_T = model.scale_factor * (x_T.sample()).detach()
-                    noise = torch.randn_like(x_T)
-                    ts = torch.full((len(x_T),), noise_timestep, device=x_T.device).long()
-                    x_T = model.q_sample(x_start=x_T, t=ts, noise=noise)
+                    # noise = torch.randn_like(x_T)
+                    # ts = torch.full((len(x_T),), noise_timestep, device=x_T.device).long()
+                    # x_T = model.q_sample(x_start=x_T, t=ts, noise=noise)
 
                 encoder_posterior_inpaint = model.first_stage_model.encode(inpaint)
                 z_inpaint = model.scale_factor * (encoder_posterior_inpaint.sample()).detach()
