@@ -22,7 +22,12 @@ class DDIMSampler(object):
                 attr = attr.to(torch.device("cuda"))
         setattr(self, name, attr)
 
-    def make_schedule(self, ddim_num_steps, ddim_discretize="uniform", ddim_eta=0., verbose=True):
+    def make_schedule(self, 
+        ddim_num_steps, 
+        ddim_discretize="uniform", 
+        ddim_eta=0., 
+        verbose=True
+    ):
         self.ddim_timesteps = make_ddim_timesteps(ddim_discr_method=ddim_discretize, num_ddim_timesteps=ddim_num_steps,
                                                   num_ddpm_timesteps=self.ddpm_num_timesteps,verbose=verbose)
         alphas_cumprod = self.model.alphas_cumprod

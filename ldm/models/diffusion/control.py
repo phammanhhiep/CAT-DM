@@ -379,14 +379,16 @@ class ControlLDM(DDPM):
         test_model_kwargs['inpaint_mask'] = z_new[:,8:,:,:]
         ddim_sampler = DDIMSampler(self)
         shape = (self.channels, self.image_size, self.image_size)
-        samples, _ = ddim_sampler.sample(ddim_steps, 
-                                        reference.shape[0], 
-                                        shape, 
-                                        hint, 
-                                        reference,
-                                        verbose=False, 
-                                        eta=ddim_eta,
-                                        test_model_kwargs=test_model_kwargs)
+        samples, _ = ddim_sampler.sample(
+            ddim_steps, 
+            reference.shape[0], 
+            shape, 
+            hint, 
+            reference,
+            verbose=False, 
+            eta=ddim_eta,
+            test_model_kwargs=test_model_kwargs
+        )
         samples = 1. / self.scale_factor * samples
         x_samples = self.first_stage_model.decode(samples[:,:4,:,:])
         # log["samples"] = x_samples
